@@ -25,7 +25,7 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn addNode(self: *Self, node: *const Node) !void {
-    if (self._edges.contains(node.*)) return error.NodeAlreadyExists;
+    if (self.nodeExists(node.*)) return error.NodeAlreadyExists;
 
     try self._nodes.append(self.alloc, node);
     try self._edges.put(self.alloc, node.*, .empty);

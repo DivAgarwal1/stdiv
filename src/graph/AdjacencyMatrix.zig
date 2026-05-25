@@ -26,6 +26,8 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn addNode(self: *Self, node: *const Node) !void {
+    if (self.nodeExists(node.*)) return error.NodeAlreadyExists;
+
     const needs_expansion = node.id >= self._indices.items.len;
     if (needs_expansion) {
         try self._indices.ensureTotalCapacity(self.alloc, @intCast(node.id + 1));
@@ -35,7 +37,7 @@ pub fn addNode(self: *Self, node: *const Node) !void {
 
     try self._nodes.append(self.alloc, node);
 
-    var new_row: std.ArrayList(bool) = try .initCapacity(self.alloc, self._nodes.items.len);
+    var new_row: std.ArrayList(bool) = try .initCapacity(self.alloc, self._nodes.items.len - 1);
     new_row.appendNTimesAssumeCapacity(false, new_row.capacity);
 
     try self._edges.append(self.alloc, new_row);
