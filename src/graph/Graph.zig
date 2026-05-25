@@ -35,51 +35,51 @@ pub fn addNode(self: *Self, node: *const Node) !void {
     }
 }
 
-pub fn nodeExists(self: *const Self, node: Node) void {
-    switch (self._graph_impl) {
+pub fn nodeExists(self: *const Self, node: Node) bool {
+    return switch (self._graph_impl) {
         inline else => |*impl| impl.nodeExists(node),
+    };
+}
+
+pub fn removeNode(self: *Self, node: Node) !void {
+    switch (self._graph_impl) {
+        inline else => |*impl| try impl.removeNode(node),
     }
 }
 
-pub fn removeNode(self: *Self, node: Node) void {
+pub fn addEdge(self: *Self, src: Node, dest: *const Node) !void {
     switch (self._graph_impl) {
-        inline else => |*impl| impl.removeNode(node),
+        inline else => |*impl| try impl.addEdge(src, dest),
     }
 }
 
-pub fn addEdge(self: *Self, src: Node, dest: Node) void {
+pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node) !void {
     switch (self._graph_impl) {
-        inline else => |*impl| impl.addEdge(src, dest),
+        inline else => |*impl| try impl.addDoubleEdge(u, v),
     }
 }
 
-pub fn addDoubleEdge(self: *Self, u: Node, v: Node) void {
+pub fn edgeExists(self: *const Self, src: Node, dest: Node) !bool {
+    return switch (self._graph_impl) {
+        inline else => |*impl| try impl.edgeExists(src, dest),
+    };
+}
+
+pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) !bool {
+    return switch (self._graph_impl) {
+        inline else => |*impl| try impl.doubleEdgeExists(u, v),
+    };
+}
+
+pub fn removeEdge(self: *Self, src: Node, dest: Node) !void {
     switch (self._graph_impl) {
-        inline else => |*impl| impl.addDoubleEdge(u, v),
+        inline else => |*impl| try impl.removeEdge(src, dest),
     }
 }
 
-pub fn edgeExists(self: *const Self, src: Node, dest: Node) void {
+pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) !void {
     switch (self._graph_impl) {
-        inline else => |*impl| impl.edgeExists(src, dest),
-    }
-}
-
-pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) void {
-    switch (self._graph_impl) {
-        inline else => |*impl| impl.doubleEdgeExists(u, v),
-    }
-}
-
-pub fn removeEdge(self: *Self, src: Node, dest: Node) void {
-    switch (self._graph_impl) {
-        inline else => |*impl| impl.removeEdge(src, dest),
-    }
-}
-
-pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) void {
-    switch (self._graph_impl) {
-        inline else => |*impl| impl.removeDoubleEdge(u, v),
+        inline else => |*impl| try impl.removeDoubleEdge(u, v),
     }
 }
 

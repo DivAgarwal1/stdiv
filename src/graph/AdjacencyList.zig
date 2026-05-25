@@ -25,6 +25,8 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn addNode(self: *Self, node: *const Node) !void {
+    if (self._edges.contains(node.*)) return error.NodeAlreadyExists;
+
     try self._nodes.append(self.alloc, node);
     try self._edges.put(self.alloc, node.*, .empty);
 }
@@ -34,22 +36,22 @@ pub fn nodeExists(self: *const Self, node: Node) bool {
 }
 
 pub fn removeNode(self: *Self, node: Node) !void {
-    if (!self.nodeExists(node.*)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(node)) return error.NoSuchNode;
 
     for (self._nodes.items, 0..) |n, i| {
-        if (n.* == node) {
+        if (n.id == node.id) {
             _ = self._nodes.swapRemove(i);
             break;
         }
     }
 
-    const current_list = self._edges.fetchRemove(node).?;
+    var current_list = self._edges.fetchRemove(node).?;
     current_list.value.deinit(self.alloc);
 
-    const iter = self._edges.iterator();
+    var iter = self._edges.iterator();
     while (iter.next()) |other_list| {
         for (other_list.value_ptr.items, 0..) |n, i| {
-            if (n.* == node) {
+            if (n.id == node.id) {
                 _ = other_list.value_ptr.swapRemove(i);
                 break;
             }
@@ -57,48 +59,52 @@ pub fn removeNode(self: *Self, node: Node) !void {
     }
 }
 
-pub fn addEdge(self: *Self, src: Node, dest: Node) !void {
-    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NodeDoesNotExist;
+pub fn addEdge(self: *Self, src: Node, dest: *const Node) !void {
+    if (!self.nodeExists(src) or !self.nodeExists(dest.*)) return error.NoSuchNode;
 
-    for (self._edges.get(src).?.items) |n| {
-        if (n.* == dest) return error.EdgeAlreadyExists;
+    for (self._edges.getPtr(src).?.items) |n| {
+        if (n.id == dest.id) return error.EdgeAlreadyExists;
     }
 
-    self._edges.get(src).?.append(self.alloc, dest);
+    try self._edges.getPtr(src).?.append(self.alloc, dest);
 }
 
-pub fn addDoubleEdge(self: *Self, u: Node, v: Node) !void {
-    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NodeDoesNotExist;
+pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node) !void {
+    if (!self.nodeExists(u.*) or !self.nodeExists(v.*)) return error.NoSuchNode;
 
-    for (self._edges.get(u).?.items) |n| {
-        if (n.* == v) return error.EdgeAlreadyExists;
+    for (self._edges.getPtr(u.*).?.items) |n| {
+        if (n.id == v.id) return error.EdgeAlreadyExists;
     }
 
-    for (self._edges.get(v).?.items) |n| {
-        if (n.* == u) return error.EdgeAlreadyExists;
+    for (self._edges.getPtr(v.*).?.items) |n| {
+        if (n.id == u.id) return error.EdgeAlreadyExists;
     }
 
-    self._edges.get(u).?.append(self.alloc, v);
-    self._edges.get(v).?.append(self.alloc, u);
+    try self._edges.getPtr(u.*).?.append(self.alloc, v);
+    try self._edges.getPtr(v.*).?.append(self.alloc, u);
 }
 
-pub fn edgeExists(self: *const Self, src: Node, dest: Node) bool {
-    for (self._edges.get(src).?.items) |n| {
-        if (n.* == dest) return true;
+pub fn edgeExists(self: *const Self, src: Node, dest: Node) !bool {
+    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
+
+    for (self._edges.getPtr(src).?.items) |n| {
+        if (n.id == dest.id) return true;
     } else {
         return false;
     }
 }
 
-pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) bool {
-    for (self._edges.get(u).?.items) |n| {
-        if (n.* == v) break;
+pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) !bool {
+    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NoSuchNode;
+
+    for (self._edges.getPtr(u).?.items) |n| {
+        if (n.id == v.id) break;
     } else {
         return false;
     }
 
-    for (self._edges.get(v).?.items) |n| {
-        if (n.* == u) break;
+    for (self._edges.getPtr(v).?.items) |n| {
+        if (n.id == u.id) break;
     } else {
         return false;
     }
@@ -107,37 +113,37 @@ pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) bool {
 }
 
 pub fn removeEdge(self: *Self, src: Node, dest: Node) !void {
-    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
 
-    for (self._edges.get(src).?.items, 0..) |n, i| {
-        if (n.* == dest) _ = self._edges.get(src).?.swapRemove(i);
+    for (self._edges.getPtr(src).?.items, 0..) |n, i| {
+        if (n.id == dest.id) _ = self._edges.getPtr(src).?.swapRemove(i);
         break;
     } else {
-        return error.EdgeDoesNotExist;
+        return error.NoSuchEdge;
     }
 }
 
 pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) !void {
-    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NoSuchNode;
 
-    const u_idx: usize = undefined;
-    for (self._edges.get(u).?.items, 0..) |n, i| {
-        if (n.* == v) u_idx = i;
+    var u_idx: usize = undefined;
+    for (self._edges.getPtr(u).?.items, 0..) |n, i| {
+        if (n.id == v.id) u_idx = i;
         break;
     } else {
-        return error.EdgeDoesNotExist;
+        return error.NoSuchEdge;
     }
 
-    const v_idx: usize = undefined;
-    for (self._edges.get(v).?.items, 0..) |n, i| {
-        if (n.* == u) v_idx = i;
+    var v_idx: usize = undefined;
+    for (self._edges.getPtr(v).?.items, 0..) |n, i| {
+        if (n.id == u.id) v_idx = i;
         break;
     } else {
-        return error.EdgeDoesNotExist;
+        return error.NoSuchEdge;
     }
 
-    _ = self._edges.get(u).?.swapRemove(u_idx);
-    _ = self._edges.get(v).?.swapRemove(v_idx);
+    _ = self._edges.getPtr(u).?.swapRemove(u_idx);
+    _ = self._edges.getPtr(v).?.swapRemove(v_idx);
 }
 
 pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
@@ -206,7 +212,7 @@ fn dfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (
         if (*root == t) return;
     }
 
-    for (self._edges.get(root.*).?.items) |neighbor| {
+    for (self._edges.getPtr(root.*).?.items) |neighbor| {
         if (visited.contains(neighbor.*)) continue;
 
         self.dfs(neighbor, target, node_fn, ctx, visited);
@@ -232,7 +238,7 @@ fn bfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (
             if (node.* == t) return;
         }
 
-        for (self._edges.get(node.*).?.items) |neighbor| {
+        for (self._edges.getPtr(node.*).?.items) |neighbor| {
             if (visited.contains(neighbor.*)) continue;
 
             deque.pushBack(self.alloc, neighbor);

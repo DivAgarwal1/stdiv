@@ -26,7 +26,7 @@ pub fn deinit(self: *Self) void {
 pub fn addNode(self: *Self, node: *const Node) !void {
     const needs_expansion = node.id >= self._indices.items.len;
     if (needs_expansion) {
-        try self._indices.ensureTotalCapacity(self.alloc, @intCast(node.id));
+        try self._indices.ensureTotalCapacity(self.alloc, @intCast(node.id + 1));
         self._indices.appendNTimesAssumeCapacity(null, @as(usize, @intCast(node.id + 1)) - self._indices.items.len);
     }
     self._indices.items[@intCast(node.id)] = self._nodes.items.len;
@@ -42,45 +42,45 @@ pub fn addNode(self: *Self, node: *const Node) !void {
 pub fn nodeExists(self: *const Self, node: Node) bool {
     if (node.id >= self._indices.items.len) return false;
 
-    return self._indices.items[node.id] != null;
+    return self._indices.items[@intCast(node.id)] != null;
 }
 
-pub fn removeNode(self: *Self, node: *const Node) !void {
-    if (!self.nodeExists(node.*)) return error.NodeDoesNotExist;
+pub fn removeNode(self: *Self, node: Node) !void {
+    if (!self.nodeExists(node)) return error.NoSuchNode;
 
-    const node_idx = self._indices.items[node.id].?;
+    const node_idx = self._indices.items[@intCast(node.id)].?;
 
-    self._indices.items[node.id] = null;
+    self._indices.items[@intCast(node.id)] = null;
 
     var removed_list = self._edges.swapRemove(node_idx);
     removed_list.deinit(self.alloc);
-    for (self._edges.items) |list| {
+    for (self._edges.items) |*list| {
         _ = list.swapRemove(node_idx);
     }
 
     _ = self._nodes.swapRemove(node_idx);
 
     if (node_idx < self._nodes.items.len) {
-        self._indices.items[self._nodes.items[node_idx].id] = node_idx;
+        self._indices.items[@intCast(self._nodes.items[node_idx].id)] = node_idx;
     }
 }
 
-pub fn addEdge(self: *Self, src: Node, dest: Node) !void {
-    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NodeDoesNotExist;
+pub fn addEdge(self: *Self, src: Node, dest: *const Node) !void {
+    if (!self.nodeExists(src) or !self.nodeExists(dest.*)) return error.NoSuchNode;
 
-    const src_idx = self._indices.items[src.id].?;
-    const dest_idx = self._indices.items[dest.id].?;
+    const src_idx = self._indices.items[@intCast(src.id)].?;
+    const dest_idx = self._indices.items[@intCast(dest.id)].?;
 
     if (self._edges.items[src_idx].items[dest_idx]) return error.EdgeAlreadyExists;
 
     self._edges.items[src_idx].items[dest_idx] = true;
 }
 
-pub fn addDoubleEdge(self: *Self, u: Node, v: Node) !void {
-    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NodeDoesNotExist;
+pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node) !void {
+    if (!self.nodeExists(u.*) or !self.nodeExists(v.*)) return error.NoSuchNode;
 
-    const u_idx = self._indices.items[u.id].?;
-    const v_idx = self._indices.items[v.id].?;
+    const u_idx = self._indices.items[@intCast(u.id)].?;
+    const v_idx = self._indices.items[@intCast(v.id)].?;
 
     if (self._edges.items[u_idx].items[v_idx]) return error.EdgeAlreadyExists;
     if (self._edges.items[v_idx].items[u_idx]) return error.EdgeAlreadyExists;
@@ -90,19 +90,19 @@ pub fn addDoubleEdge(self: *Self, u: Node, v: Node) !void {
 }
 
 pub fn edgeExists(self: *const Self, src: Node, dest: Node) !bool {
-    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
 
-    const src_idx = self._indices.items[src.id].?;
-    const dest_idx = self._indices.items[dest.id].?;
+    const src_idx = self._indices.items[@intCast(src.id)].?;
+    const dest_idx = self._indices.items[@intCast(dest.id)].?;
 
     return self._edges.items[src_idx].items[dest_idx];
 }
 
 pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) !bool {
-    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NoSuchNode;
 
-    const u_idx = self._indices.items[u.id].?;
-    const v_idx = self._indices.items[v.id].?;
+    const u_idx = self._indices.items[@intCast(u.id)].?;
+    const v_idx = self._indices.items[@intCast(v.id)].?;
 
     if (!self._edges.items[u_idx].items[v_idx]) return false;
     if (!self._edges.items[v_idx].items[u_idx]) return false;
@@ -111,34 +111,34 @@ pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) !bool {
 }
 
 pub fn removeEdge(self: *Self, src: Node, dest: Node) !void {
-    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
 
-    const src_idx = self._indices.items[src.id].?;
-    const dest_idx = self._indices.items[dest.id].?;
+    const src_idx = self._indices.items[@intCast(src.id)].?;
+    const dest_idx = self._indices.items[@intCast(dest.id)].?;
 
     if (self._edges.items[src_idx].items[dest_idx]) {
         self._edges.items[src_idx].items[dest_idx] = false;
     } else {
-        return error.EdgeDoesNotExist;
+        return error.NoSuchEdge;
     }
 }
 
 pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) !void {
-    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NoSuchNode;
 
-    const u_idx = self._indices.items[u.id].?;
-    const v_idx = self._indices.items[v.id].?;
+    const u_idx = self._indices.items[@intCast(u.id)].?;
+    const v_idx = self._indices.items[@intCast(v.id)].?;
 
     if (self._edges.items[u_idx].items[v_idx] and self._edges.items[v_idx].items[u_idx]) {
         self._edges.items[u_idx].items[v_idx] = false;
         self._edges.items[v_idx].items[u_idx] = false;
     } else {
-        return error.EdgeDoesNotExist;
+        return error.NoSuchEdge;
     }
 }
 
 pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
-    if (!self.nodeExists(root.*)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(root.*)) return error.NoSuchNode;
 
     var path_list: std.ArrayList(*const Node) = .empty;
     defer path_list.deinit(self.alloc);
@@ -162,7 +162,7 @@ pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
 }
 
 pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
-    if (!self.nodeExists(root.*)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(root.*)) return error.NoSuchNode;
 
     var path_list: std.ArrayList(*const Node) = .empty;
     defer path_list.deinit(self.alloc);
@@ -177,7 +177,7 @@ pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
 }
 
 pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
-    if (!self.nodeExists(root.*)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(root.*)) return error.NoSuchNode;
 
     var visited: std.AutoHashMap(Node, {}) = .init(self.alloc);
     defer visited.deinit();
@@ -186,7 +186,7 @@ pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *c
 }
 
 pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
-    if (!self.nodeExists(root.*)) return error.NodeDoesNotExist;
+    if (!self.nodeExists(root.*)) return error.NoSuchNode;
 
     self.bfs(root, null, node_fn, ctx);
 }
@@ -211,7 +211,7 @@ fn dfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (
         if (*root == t) return;
     }
 
-    const root_idx = self._indices.items[root.id].?;
+    const root_idx = self._indices.items[@intCast(root.id)].?;
 
     for (self._edges.items[root_idx].items, 0..) |neighbor, i| {
         if (!neighbor) continue;
@@ -240,7 +240,7 @@ fn bfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (
             if (node.* == t) return;
         }
 
-        const root_idx = self._indices.items[node.id].?;
+        const root_idx = self._indices.items[@intCast(node.id)].?;
 
         for (self._edges.items[root_idx].items, 0..) |neighbor, i| {
             if (!neighbor) continue;
