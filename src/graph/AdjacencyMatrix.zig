@@ -17,6 +17,8 @@ pub fn init(alloc: std.mem.Allocator) Self {
 pub fn deinit(self: *Self) void {
     self._nodes.deinit(self.alloc);
 
+    self._indices.deinit(self.alloc);
+
     for (self._edges.items) |*list| {
         list.deinit(self.alloc);
     }
@@ -33,7 +35,11 @@ pub fn addNode(self: *Self, node: *const Node) !void {
 
     try self._nodes.append(self.alloc, node);
 
-    try self._edges.append(self.alloc, .empty);
+    var new_row: std.ArrayList(bool) = try .initCapacity(self.alloc, self._nodes.items.len);
+    new_row.appendNTimesAssumeCapacity(false, new_row.capacity);
+
+    try self._edges.append(self.alloc, new_row);
+
     for (self._edges.items) |*list| {
         try list.append(self.alloc, false);
     }
