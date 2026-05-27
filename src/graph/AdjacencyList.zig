@@ -150,10 +150,13 @@ pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
     var path_list: std.ArrayList(*const Node) = .empty;
     defer path_list.deinit(self.alloc);
 
-    var visited: std.AutoHashMap(Node, {}) = .init(self.alloc);
+    var visited: std.AutoHashMap(Node, void) = .init(self.alloc);
     defer visited.deinit();
 
-    const path_ctx: PathCtx = .{ .alloc = self.alloc, .path = &path_list };
+    try path_list.ensureTotalCapacity(self.alloc, self._nodes.items.len);
+    try visited.ensureTotalCapacity(@intCast(self._nodes.items.len));
+
+    var path_ctx: PathCtx = .{ .alloc = self.alloc, .path = &path_list };
     self.dfs(root, target, pathFn, &path_ctx, &visited);
 
     if (target) |t| {
@@ -162,8 +165,8 @@ pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
         }
     }
 
-    const path: []*const Node = path_list.toOwnedSlice(self.alloc);
-    std.mem.reverse(*const Node, path);
+    const path: []*const Node = try path_list.toOwnedSlice(self.alloc);
+    // std.mem.reverse(*const Node, path);
 
     return path;
 }
@@ -172,7 +175,7 @@ pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
     var path_list: std.ArrayList(*const Node) = .empty;
     defer path_list.deinit(self.alloc);
 
-    const path_ctx: PathCtx = .{ .alloc = self.alloc, .path = &path_list };
+    var path_ctx: PathCtx = .{ .alloc = self.alloc, .path = &path_list };
     self.bfs(root, target, pathFn, &path_ctx);
 
     const path: []*const Node = path_list.toOwnedSlice(self.alloc);
@@ -181,7 +184,7 @@ pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
     return path;
 }
 
-pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
+pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) void {
     var visited: std.AutoHashMap(Node, {}) = .init(self.alloc);
     defer visited.deinit();
 
@@ -189,14 +192,14 @@ pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *c
 }
 
 pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
-    self.bfs(root, null, node_fn, ctx);
+    try self.bfs(root, null, node_fn, ctx);
 }
 
 fn pathFn(node: *const Node, ctx: *anyopaque) void {
-    const path_ctx: *PathCtx = @ptrCast(ctx);
+    const path_ctx: *PathCtx = @ptrCast(@alignCast(ctx));
     const path: *std.ArrayList(*const Node) = @ptrCast(path_ctx.path);
 
-    path.append(path_ctx.alloc, node);
+    path.appendAssumeCapacity(node);
 }
 
 const PathCtx = struct {
@@ -204,12 +207,14 @@ const PathCtx = struct {
     path: *std.ArrayList(*const Node),
 };
 
-fn dfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque, visited: *std.AutoHashMap(Node, void)) !void {
-    visited.put(root.*, {});
+fn dfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque, visited: *std.AutoHashMap(Node, void)) void {
+    visited.putAssumeCapacity(root.*, {});
     node_fn(root, ctx);
 
+    std.debug.print("Dfs running on {d}\n", .{root.id});
+
     if (target) |t| {
-        if (*root == t) return;
+        if (root.id == t.id) return;
     }
 
     for (self._edges.getPtr(root.*).?.items) |neighbor| {

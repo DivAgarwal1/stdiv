@@ -273,3 +273,54 @@ test "AdjList removeNode hard" {
     try std.testing.expect(graph._graph_impl.adjacency_list._edges.getPtr(node3) != null);
     try std.testing.expect(graph._graph_impl.adjacency_list._edges.getPtr(node3).?.items.len == 0);
 }
+
+test "AdjList dfsPath" {
+    const alloc = std.testing.allocator;
+
+    var graph: Graph = .initAdjacencyList(alloc);
+    defer graph.deinit();
+
+    const a = graph.createNode();
+    const b = graph.createNode();
+    const c = graph.createNode();
+    const d = graph.createNode();
+    const e = graph.createNode();
+    const f = graph.createNode();
+    const g = graph.createNode();
+
+    try graph.addNode(&a);
+    try graph.addNode(&b);
+    try graph.addNode(&c);
+    try graph.addNode(&d);
+    try graph.addNode(&e);
+    try graph.addNode(&f);
+    try graph.addNode(&g);
+
+    try graph.addDoubleEdge(&a, &b);
+    try graph.addDoubleEdge(&a, &c);
+
+    try graph.addDoubleEdge(&b, &d);
+    try graph.addDoubleEdge(&b, &e);
+
+    try graph.addDoubleEdge(&c, &e);
+    try graph.addDoubleEdge(&c, &f);
+
+    try graph.addDoubleEdge(&d, &e);
+
+    try graph.addDoubleEdge(&e, &g);
+
+    try graph.addDoubleEdge(&f, &g);
+
+    const path1 = try graph.dfsPath(&a, g);
+    const path2 = try graph.dfsPath(&a, null);
+
+    std.debug.print("Path1:\n", .{});
+    for (path1, 0..) |node, i| {
+        std.debug.print("{d}: {d}\n", .{ i, node.id });
+    }
+
+    std.debug.print("Path2:\n", .{});
+    for (path2, 0..) |node, i| {
+        std.debug.print("{d}: {d}\n", .{ i, node.id });
+    }
+}

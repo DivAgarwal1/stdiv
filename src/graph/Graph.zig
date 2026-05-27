@@ -83,7 +83,7 @@ pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) !void {
     }
 }
 
-pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) []*const Node {
+pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
     return switch (self._graph_impl) {
         inline else => |*impl| impl.dfsPath(root, target),
     };
