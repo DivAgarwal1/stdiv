@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Node = @import("Node.zig");
-const Deque = @import("../util/deque.zig").Deque(*const Node);
 
 const Self = @This();
 
@@ -156,27 +155,28 @@ pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
     try path_list.ensureTotalCapacity(self.alloc, self._nodes.items.len);
     try visited.ensureTotalCapacity(@intCast(self._nodes.items.len));
 
-    var path_ctx: PathCtx = .{ .alloc = self.alloc, .path = &path_list };
-    self.dfs(root, target, pathFn, &path_ctx, &visited);
+    var path_ctx: PathCtx = .{
+        .alloc = self.alloc,
+        .path = &path_list,
+        .target = target,
+    };
+    const res = self.dfs(root, target, pathStartFn, pathEndFn, &path_ctx, &visited);
 
-    if (target) |t| {
-        if (!visited.contains(t)) {
-            return error.NoPath;
-        }
+    if (target != null and !res) {
+        return error.NoPath;
     }
 
     const path: []*const Node = try path_list.toOwnedSlice(self.alloc);
-    // std.mem.reverse(*const Node, path);
 
     return path;
 }
 
-pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
+pub fn bfsPath(self: *const Self, root: *const Node, target: Node) ![]*const Node {
     var path_list: std.ArrayList(*const Node) = .empty;
     defer path_list.deinit(self.alloc);
 
     var path_ctx: PathCtx = .{ .alloc = self.alloc, .path = &path_list };
-    self.bfs(root, target, pathFn, &path_ctx);
+    self.bfs(root, target, pathStartFn, &path_ctx);
 
     const path: []*const Node = path_list.toOwnedSlice(self.alloc);
     std.mem.reverse(*const Node, path);
@@ -188,44 +188,57 @@ pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *c
     var visited: std.AutoHashMap(Node, {}) = .init(self.alloc);
     defer visited.deinit();
 
-    self.dfs(root, null, node_fn, ctx, &visited);
+    self.dfs(root, null, node_fn, null, ctx, &visited);
 }
 
 pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
     try self.bfs(root, null, node_fn, ctx);
 }
 
-fn pathFn(node: *const Node, ctx: *anyopaque) void {
+fn pathStartFn(node: *const Node, ctx: *anyopaque) void {
     const path_ctx: *PathCtx = @ptrCast(@alignCast(ctx));
     const path: *std.ArrayList(*const Node) = @ptrCast(path_ctx.path);
 
     path.appendAssumeCapacity(node);
 }
 
+fn pathEndFn(node: *const Node, dfs_result: bool, ctx: *anyopaque) void {
+    const path_ctx: *PathCtx = @ptrCast(@alignCast(ctx));
+    const path: *std.ArrayList(*const Node) = @ptrCast(path_ctx.path);
+
+    _ = node;
+    if (path_ctx.target != null and !dfs_result) _ = path.pop();
+}
+
 const PathCtx = struct {
     alloc: std.mem.Allocator,
     path: *std.ArrayList(*const Node),
+    target: ?Node,
 };
 
-fn dfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque, visited: *std.AutoHashMap(Node, void)) void {
+fn dfs(self: *const Self, root: *const Node, target: ?Node, start_fn: ?*const fn (node: *const Node, ctx: *anyopaque) void, end_fn: ?*const fn (node: *const Node, dfs_result: bool, ctx: *anyopaque) void, ctx: *anyopaque, visited: *std.AutoHashMap(Node, void)) bool {
     visited.putAssumeCapacity(root.*, {});
-    node_fn(root, ctx);
+    if (start_fn) |func| func(root, ctx);
 
     std.debug.print("Dfs running on {d}\n", .{root.id});
 
     if (target) |t| {
-        if (root.id == t.id) return;
+        if (root.id == t.id) return true;
     }
 
     for (self._edges.getPtr(root.*).?.items) |neighbor| {
         if (visited.contains(neighbor.*)) continue;
 
-        self.dfs(neighbor, target, node_fn, ctx, visited);
+        const res = self.dfs(neighbor, target, start_fn, end_fn, ctx, visited);
+        if (end_fn) |func| func(root, res, ctx);
+        if (res) return true;
     }
+
+    return false;
 }
 
 fn bfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
-    var deque: Deque = .empty;
+    var deque: std.Deque(*const Node) = .empty;
     defer deque.deinit(self.alloc);
 
     var visited: std.AutoHashMap(Node, void) = .init(self.alloc);

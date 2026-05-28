@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Node = @import("Node.zig");
-const Deque = @import("../util/deque.zig").Deque(*const Node);
 
 const Self = @This();
 
@@ -233,7 +232,7 @@ fn dfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (
 }
 
 fn bfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
-    var deque: Deque = .empty;
+    var deque: std.Deque(*const Node) = .empty;
     defer deque.deinit(self.alloc);
 
     var visited: std.AutoHashMap(Node, void) = .init(self.alloc);

@@ -311,8 +311,11 @@ test "AdjList dfsPath" {
 
     try graph.addDoubleEdge(&f, &g);
 
-    const path1 = try graph.dfsPath(&a, g);
+    const path1 = try graph.dfsPath(&a, d);
+    defer alloc.free(path1);
+
     const path2 = try graph.dfsPath(&a, null);
+    defer alloc.free(path2);
 
     std.debug.print("Path1:\n", .{});
     for (path1, 0..) |node, i| {
