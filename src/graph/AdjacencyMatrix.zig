@@ -236,7 +236,7 @@ fn bfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (
     defer deque.deinit(self.alloc);
 
     var visited: std.AutoHashMap(Node, void) = .init(self.alloc);
-    defer deque.deinit(self.alloc);
+    defer visited.deinit();
 
     deque.pushBack(self.alloc, root);
 

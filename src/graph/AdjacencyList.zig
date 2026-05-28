@@ -220,8 +220,6 @@ fn dfs(self: *const Self, root: *const Node, target: ?Node, start_fn: ?*const fn
     visited.putAssumeCapacity(root.*, {});
     if (start_fn) |func| func(root, ctx);
 
-    std.debug.print("Dfs running on {d}\n", .{root.id});
-
     if (target) |t| {
         if (root.id == t.id) return true;
     }
@@ -242,7 +240,7 @@ fn bfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (
     defer deque.deinit(self.alloc);
 
     var visited: std.AutoHashMap(Node, void) = .init(self.alloc);
-    defer deque.deinit(self.alloc);
+    defer visited.deinit();
 
     deque.pushBack(self.alloc, root);
 
