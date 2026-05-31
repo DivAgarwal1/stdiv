@@ -35,14 +35,6 @@ pub fn build(b: *std.Build) void {
     // }
     //
 
-    const check_obj = b.addObject(.{
-        .name = "stdiv-check",
-        .root_module = stdiv,
-    });
-
-    const check_step = b.step("check", "Check for compile errors");
-    check_step.dependOn(&check_obj.step);
-
     const stdiv_tests = b.addTest(.{
         .root_module = stdiv,
     });

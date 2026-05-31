@@ -314,16 +314,104 @@ test "AdjList dfsPath" {
     const path1 = try graph.dfsPath(&a, d);
     defer alloc.free(path1);
 
-    const path2 = try graph.dfsPath(&a, null);
+    const path2 = try graph.dfsPath(&a, g);
     defer alloc.free(path2);
 
-    std.debug.print("Path1:\n", .{});
-    for (path1, 0..) |node, i| {
-        std.debug.print("{d}: {d}\n", .{ i, node.id });
-    }
+    const path3 = try graph.dfsPath(&a, null);
+    defer alloc.free(path3);
 
-    std.debug.print("Path2:\n", .{});
-    for (path2, 0..) |node, i| {
-        std.debug.print("{d}: {d}\n", .{ i, node.id });
+    for (0..path1.len - 1) |i| {
+        try std.testing.expect(try graph.edgeExists(path1[i].*, path1[i + 1].*));
     }
+    try std.testing.expect(path1[path1.len - 1].id == d.id);
+
+    for (0..path2.len - 1) |i| {
+        try std.testing.expect(try graph.edgeExists(path2[i].*, path2[i + 1].*));
+    }
+    try std.testing.expect(path2[path2.len - 1].id == g.id);
+
+    for (0..path3.len - 1) |i| {
+        try std.testing.expect(try graph.edgeExists(path3[i].*, path3[i + 1].*));
+    }
+    try std.testing.expect(path3.len == graph._graph_impl.adjacency_list._nodes.items.len);
+}
+
+test "AdjList bfsPath" {
+    const alloc = std.testing.allocator;
+
+    var graph: Graph = .initAdjacencyList(alloc);
+    defer graph.deinit();
+
+    const DepthNode = struct {
+        node: Node,
+        depth: u32,
+    };
+
+    const a: DepthNode = .{ .node = graph.createNode(), .depth = 0 };
+    const b: DepthNode = .{ .node = graph.createNode(), .depth = 1 };
+    const c: DepthNode = .{ .node = graph.createNode(), .depth = 1 };
+    const d: DepthNode = .{ .node = graph.createNode(), .depth = 2 };
+    const e: DepthNode = .{ .node = graph.createNode(), .depth = 2 };
+    const f: DepthNode = .{ .node = graph.createNode(), .depth = 2 };
+    const g: DepthNode = .{ .node = graph.createNode(), .depth = 3 };
+
+    try graph.addNode(&a.node);
+    try graph.addNode(&b.node);
+    try graph.addNode(&c.node);
+    try graph.addNode(&d.node);
+    try graph.addNode(&e.node);
+    try graph.addNode(&f.node);
+    try graph.addNode(&g.node);
+
+    try graph.addDoubleEdge(&a.node, &b.node);
+    try graph.addDoubleEdge(&a.node, &c.node);
+
+    try graph.addDoubleEdge(&b.node, &d.node);
+    try graph.addDoubleEdge(&b.node, &e.node);
+
+    try graph.addDoubleEdge(&c.node, &e.node);
+    try graph.addDoubleEdge(&c.node, &f.node);
+
+    try graph.addDoubleEdge(&d.node, &e.node);
+
+    try graph.addDoubleEdge(&e.node, &g.node);
+
+    try graph.addDoubleEdge(&f.node, &g.node);
+
+    const path1 = try graph.bfsPath(&a.node, d.node);
+    defer alloc.free(path1);
+
+    const path2 = try graph.bfsPath(&a.node, g.node);
+    defer alloc.free(path2);
+
+    const path3 = try graph.bfsPath(&a.node, null);
+    defer alloc.free(path3);
+
+    for (0..path1.len - 1) |i| {
+        try std.testing.expect(try graph.edgeExists(path1[i].*, path1[i + 1].*));
+
+        const depth_node_1: *const DepthNode = @fieldParentPtr("node", path1[i]);
+        const depth_node_2: *const DepthNode = @fieldParentPtr("node", path1[i + 1]);
+        try std.testing.expect(depth_node_2.depth > depth_node_1.depth);
+    }
+    try std.testing.expect(path1[path1.len - 1].id == d.node.id);
+
+    for (0..path2.len - 1) |i| {
+        try std.testing.expect(try graph.edgeExists(path2[i].*, path2[i + 1].*));
+
+        const depth_node_1: *const DepthNode = @fieldParentPtr("node", path2[i]);
+        const depth_node_2: *const DepthNode = @fieldParentPtr("node", path2[i + 1]);
+        try std.testing.expect(depth_node_2.depth > depth_node_1.depth);
+    }
+    try std.testing.expect(path2[path2.len - 1].id == g.node.id);
+
+    for (0..path3.len - 1) |i| {
+        try std.testing.expect(try graph.edgeExists(path3[i].*, path3[i + 1].*));
+
+        const depth_node_1: *const DepthNode = @fieldParentPtr("node", path3[i]);
+        const depth_node_2: *const DepthNode = @fieldParentPtr("node", path3[i + 1]);
+        try std.testing.expect(depth_node_2.depth > depth_node_1.depth);
+    }
+    std.debug.print("Lens: {}, {}\n", .{ path3.len, graph._graph_impl.adjacency_list._nodes.items.len });
+    // try std.testing.expect(path3.len == graph._graph_impl.adjacency_list._nodes.items.len);
 }

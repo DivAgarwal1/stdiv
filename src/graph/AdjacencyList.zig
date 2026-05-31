@@ -146,39 +146,66 @@ pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) !void {
 }
 
 pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
-    var path_list: std.ArrayList(*const Node) = .empty;
-    defer path_list.deinit(self.alloc);
+    if (!self.nodeExists(root.*)) return error.NoSuchNode;
+
+    var parent: std.AutoHashMap(*const Node, *const Node) = .init(self.alloc);
+    defer parent.deinit();
 
     var visited: std.AutoHashMap(Node, void) = .init(self.alloc);
     defer visited.deinit();
 
-    try path_list.ensureTotalCapacity(self.alloc, self._nodes.items.len);
+    try parent.ensureTotalCapacity(@intCast(self._nodes.items.len));
     try visited.ensureTotalCapacity(@intCast(self._nodes.items.len));
 
     var path_ctx: PathCtx = .{
         .alloc = self.alloc,
-        .path = &path_list,
-        .target = target,
+        .parent = &parent,
+        .last_insert = root,
     };
-    const res = self.dfs(root, target, pathStartFn, pathEndFn, &path_ctx, &visited);
+    const res = self.dfs(root, root, target, pathFn, &path_ctx, &visited);
 
     if (target != null and !res) {
         return error.NoPath;
     }
 
-    const path: []*const Node = try path_list.toOwnedSlice(self.alloc);
+    var path_list: std.ArrayList(*const Node) = .empty;
+    var curr_node = path_ctx.last_insert;
+    while (curr_node.id != root.id) {
+        try path_list.append(self.alloc, curr_node);
+        curr_node = parent.get(curr_node).?;
+    }
+    try path_list.append(self.alloc, root);
+
+    const path = try path_list.toOwnedSlice(self.alloc);
+    std.mem.reverse(*const Node, path);
 
     return path;
 }
 
-pub fn bfsPath(self: *const Self, root: *const Node, target: Node) ![]*const Node {
+pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
+    if (!self.nodeExists(root.*)) return error.NoSuchNode;
+
+    var parent: std.AutoHashMap(*const Node, *const Node) = .init(self.alloc);
+    defer parent.deinit();
+
+    try parent.ensureTotalCapacity(@intCast(self._nodes.items.len));
+
+    var path_ctx: PathCtx = .{
+        .alloc = self.alloc,
+        .parent = &parent,
+        .last_insert = root,
+    };
+    try self.bfs(root, target, pathFn, &path_ctx);
+
     var path_list: std.ArrayList(*const Node) = .empty;
-    defer path_list.deinit(self.alloc);
+    var curr_node = path_ctx.last_insert;
+    while (curr_node.id != root.id) {
+        try path_list.append(self.alloc, curr_node);
+        curr_node = parent.get(curr_node).?;
+    }
+    try path_list.append(self.alloc, root);
 
-    var path_ctx: PathCtx = .{ .alloc = self.alloc, .path = &path_list };
-    self.bfs(root, target, pathStartFn, &path_ctx);
-
-    const path: []*const Node = path_list.toOwnedSlice(self.alloc);
+    const path = try path_list.toOwnedSlice(self.alloc);
     std.mem.reverse(*const Node, path);
 
     return path;
@@ -195,74 +222,85 @@ pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *c
     try self.bfs(root, null, node_fn, ctx);
 }
 
-fn pathStartFn(node: *const Node, ctx: *anyopaque) void {
+fn pathFn(node: *const Node, parent: *const Node, ctx: *anyopaque) void {
     const path_ctx: *PathCtx = @ptrCast(@alignCast(ctx));
-    const path: *std.ArrayList(*const Node) = @ptrCast(path_ctx.path);
+    const path: *std.AutoHashMap(*const Node, *const Node) = path_ctx.parent;
 
-    path.appendAssumeCapacity(node);
-}
+    std.debug.print("Inserted {}\n", .{node.id});
 
-fn pathEndFn(node: *const Node, dfs_result: bool, ctx: *anyopaque) void {
-    const path_ctx: *PathCtx = @ptrCast(@alignCast(ctx));
-    const path: *std.ArrayList(*const Node) = @ptrCast(path_ctx.path);
-
-    _ = node;
-    if (path_ctx.target != null and !dfs_result) _ = path.pop();
+    path_ctx.last_insert = node;
+    path.putAssumeCapacity(node, parent);
 }
 
 const PathCtx = struct {
     alloc: std.mem.Allocator,
-    path: *std.ArrayList(*const Node),
-    target: ?Node,
+    parent: *std.AutoHashMap(*const Node, *const Node),
+    last_insert: *const Node,
 };
 
-fn dfs(self: *const Self, root: *const Node, target: ?Node, start_fn: ?*const fn (node: *const Node, ctx: *anyopaque) void, end_fn: ?*const fn (node: *const Node, dfs_result: bool, ctx: *anyopaque) void, ctx: *anyopaque, visited: *std.AutoHashMap(Node, void)) bool {
-    visited.putAssumeCapacity(root.*, {});
-    if (start_fn) |func| func(root, ctx);
+fn dfs(
+    self: *const Self,
+    node: *const Node,
+    parent: *const Node,
+    target: ?Node,
+    node_fn: ?*const fn (node: *const Node, parent: *const Node, ctx: *anyopaque) void,
+    ctx: ?*anyopaque,
+    visited: *std.AutoHashMap(Node, void),
+) bool {
+    visited.putAssumeCapacity(node.*, {});
+    if (node_fn) |func| func(node, parent, ctx.?);
 
     if (target) |t| {
-        if (root.id == t.id) return true;
+        if (node.id == t.id) return true;
     }
 
-    for (self._edges.getPtr(root.*).?.items) |neighbor| {
+    for (self._edges.getPtr(node.*).?.items) |neighbor| {
         if (visited.contains(neighbor.*)) continue;
 
-        const res = self.dfs(neighbor, target, start_fn, end_fn, ctx, visited);
-        if (end_fn) |func| func(root, res, ctx);
+        const res = self.dfs(neighbor, node, target, node_fn, ctx, visited);
         if (res) return true;
     }
 
     return false;
 }
 
-fn bfs(self: *const Self, root: *const Node, target: ?Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
+fn bfs(
+    self: *const Self,
+    root: *const Node,
+    target: ?Node,
+    node_fn: ?*const fn (node: *const Node, parent: *const Node, ctx: *anyopaque) void,
+    ctx: ?*anyopaque,
+) !void {
     var deque: std.Deque(*const Node) = .empty;
     defer deque.deinit(self.alloc);
 
-    var visited: std.AutoHashMap(Node, void) = .init(self.alloc);
-    defer visited.deinit();
+    var parent: std.AutoHashMap(Node, *const Node) = .init(self.alloc);
+    defer parent.deinit();
 
-    deque.pushBack(self.alloc, root);
+    try parent.put(root.*, root);
+    try deque.pushBack(self.alloc, root);
 
     while (deque.len > 0) {
         const node: *const Node = deque.popFront().?;
 
-        visited.put(node.*, {});
-        node_fn(node, ctx);
+        std.debug.print("Running bfs on {}\n", .{node.id});
+
+        if (node_fn) |func| func(node, parent.get(node.*).?, ctx.?);
 
         if (target) |t| {
-            if (node.* == t) return;
+            if (node.id == t.id) return;
         }
 
         for (self._edges.getPtr(node.*).?.items) |neighbor| {
-            if (visited.contains(neighbor.*)) continue;
+            if (parent.contains(neighbor.*)) continue;
 
-            deque.pushBack(self.alloc, neighbor);
+            try parent.put(neighbor.*, node);
+            try deque.pushBack(self.alloc, neighbor);
         }
     }
 
     if (target) |t| {
-        if (!visited.contains(t)) {
+        if (!parent.contains(t)) {
             return error.NoPath;
         }
     }

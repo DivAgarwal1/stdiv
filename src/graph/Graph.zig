@@ -89,7 +89,7 @@ pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
     };
 }
 
-pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) []const *Node {
+pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
     return switch (self._graph_impl) {
         inline else => |*impl| impl.bfsPath(root, target),
     };
