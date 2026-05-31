@@ -148,36 +148,68 @@ pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) !void {
 pub fn dfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const Node {
     if (!self.nodeExists(root.*)) return error.NoSuchNode;
 
-    var parent: std.AutoHashMap(*const Node, *const Node) = .init(self.alloc);
-    defer parent.deinit();
-
     var visited: std.AutoHashMap(Node, void) = .init(self.alloc);
     defer visited.deinit();
-
-    try parent.ensureTotalCapacity(@intCast(self._nodes.items.len));
     try visited.ensureTotalCapacity(@intCast(self._nodes.items.len));
+
+    var parent: std.AutoHashMap(*const Node, *const Node) = .init(self.alloc);
+    defer parent.deinit();
+    try parent.ensureTotalCapacity(@intCast(self._nodes.items.len));
 
     var path_ctx: PathCtx = .{
         .alloc = self.alloc,
         .parent = &parent,
         .last_insert = root,
     };
-    const res = self.dfs(root, root, target, pathFn, &path_ctx, &visited);
+
+    var collect_path: std.ArrayList(*const Node) = .empty;
+    defer collect_path.deinit(self.alloc);
+    try collect_path.ensureTotalCapacity(self.alloc, self._nodes.items.len);
+
+    var collect_ctx: CollectCtx = .{
+        .alloc = self.alloc,
+        .path = &collect_path,
+    };
+
+    const res = if (target != null) blk: {
+        break :blk self.dfs(
+            root,
+            root,
+            target,
+            pathFn,
+            &path_ctx,
+            &visited,
+        );
+    } else blk: {
+        break :blk self.dfs(
+            root,
+            root,
+            target,
+            collectFn,
+            &collect_ctx,
+            &visited,
+        );
+    };
 
     if (target != null and !res) {
         return error.NoPath;
     }
 
-    var path_list: std.ArrayList(*const Node) = .empty;
-    var curr_node = path_ctx.last_insert;
-    while (curr_node.id != root.id) {
-        try path_list.append(self.alloc, curr_node);
-        curr_node = parent.get(curr_node).?;
-    }
-    try path_list.append(self.alloc, root);
+    var path: []*const Node = undefined;
 
-    const path = try path_list.toOwnedSlice(self.alloc);
-    std.mem.reverse(*const Node, path);
+    if (target != null) {
+        var path_list: std.ArrayList(*const Node) = .empty;
+        var curr_node = path_ctx.last_insert;
+        while (curr_node.id != root.id) {
+            try path_list.append(self.alloc, curr_node);
+            curr_node = parent.get(curr_node).?;
+        }
+        try path_list.append(self.alloc, root);
+        path = try path_list.toOwnedSlice(self.alloc);
+        std.mem.reverse(*const Node, path);
+    } else {
+        path = try collect_path.toOwnedSlice(self.alloc);
+    }
 
     return path;
 }
@@ -187,7 +219,6 @@ pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
 
     var parent: std.AutoHashMap(*const Node, *const Node) = .init(self.alloc);
     defer parent.deinit();
-
     try parent.ensureTotalCapacity(@intCast(self._nodes.items.len));
 
     var path_ctx: PathCtx = .{
@@ -195,18 +226,48 @@ pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
         .parent = &parent,
         .last_insert = root,
     };
-    try self.bfs(root, target, pathFn, &path_ctx);
 
-    var path_list: std.ArrayList(*const Node) = .empty;
-    var curr_node = path_ctx.last_insert;
-    while (curr_node.id != root.id) {
-        try path_list.append(self.alloc, curr_node);
-        curr_node = parent.get(curr_node).?;
+    var collect_path: std.ArrayList(*const Node) = .empty;
+    defer collect_path.deinit(self.alloc);
+    try collect_path.ensureTotalCapacity(self.alloc, self._nodes.items.len);
+
+    var collect_ctx: CollectCtx = .{
+        .alloc = self.alloc,
+        .path = &collect_path,
+    };
+
+    if (target != null) {
+        try self.bfs(
+            root,
+            target,
+            pathFn,
+            &path_ctx,
+        );
+    } else {
+        try self.bfs(
+            root,
+            target,
+            collectFn,
+            &collect_ctx,
+        );
     }
-    try path_list.append(self.alloc, root);
 
-    const path = try path_list.toOwnedSlice(self.alloc);
-    std.mem.reverse(*const Node, path);
+    var path: []*const Node = undefined;
+
+    if (target != null) {
+        var path_list: std.ArrayList(*const Node) = .empty;
+        var curr_node = path_ctx.last_insert;
+        while (curr_node.id != root.id) {
+            try path_list.append(self.alloc, curr_node);
+            curr_node = parent.get(curr_node).?;
+        }
+        try path_list.append(self.alloc, root);
+
+        path = try path_list.toOwnedSlice(self.alloc);
+        std.mem.reverse(*const Node, path);
+    } else {
+        path = try collect_path.toOwnedSlice(self.alloc);
+    }
 
     return path;
 }
@@ -224,18 +285,29 @@ pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *c
 
 fn pathFn(node: *const Node, parent: *const Node, ctx: *anyopaque) void {
     const path_ctx: *PathCtx = @ptrCast(@alignCast(ctx));
-    const path: *std.AutoHashMap(*const Node, *const Node) = path_ctx.parent;
-
-    std.debug.print("Inserted {}\n", .{node.id});
+    const parents: *std.AutoHashMap(*const Node, *const Node) = path_ctx.parent;
 
     path_ctx.last_insert = node;
-    path.putAssumeCapacity(node, parent);
+    parents.putAssumeCapacity(node, parent);
 }
 
 const PathCtx = struct {
     alloc: std.mem.Allocator,
     parent: *std.AutoHashMap(*const Node, *const Node),
     last_insert: *const Node,
+};
+
+fn collectFn(node: *const Node, parent: *const Node, ctx: *anyopaque) void {
+    const collect_ctx: *CollectCtx = @ptrCast(@alignCast(ctx));
+    const path: *std.ArrayList(*const Node) = collect_ctx.path;
+
+    _ = parent;
+    path.appendAssumeCapacity(node);
+}
+
+const CollectCtx = struct {
+    alloc: std.mem.Allocator,
+    path: *std.ArrayList(*const Node),
 };
 
 fn dfs(
@@ -282,8 +354,6 @@ fn bfs(
 
     while (deque.len > 0) {
         const node: *const Node = deque.popFront().?;
-
-        std.debug.print("Running bfs on {}\n", .{node.id});
 
         if (node_fn) |func| func(node, parent.get(node.*).?, ctx.?);
 

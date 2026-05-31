@@ -406,12 +406,9 @@ test "AdjList bfsPath" {
     try std.testing.expect(path2[path2.len - 1].id == g.node.id);
 
     for (0..path3.len - 1) |i| {
-        try std.testing.expect(try graph.edgeExists(path3[i].*, path3[i + 1].*));
-
         const depth_node_1: *const DepthNode = @fieldParentPtr("node", path3[i]);
         const depth_node_2: *const DepthNode = @fieldParentPtr("node", path3[i + 1]);
-        try std.testing.expect(depth_node_2.depth > depth_node_1.depth);
+        try std.testing.expect(depth_node_2.depth >= depth_node_1.depth);
     }
-    std.debug.print("Lens: {}, {}\n", .{ path3.len, graph._graph_impl.adjacency_list._nodes.items.len });
-    // try std.testing.expect(path3.len == graph._graph_impl.adjacency_list._nodes.items.len);
+    try std.testing.expect(path3.len == graph._graph_impl.adjacency_list._nodes.items.len);
 }
