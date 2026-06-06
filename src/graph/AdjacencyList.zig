@@ -2,12 +2,17 @@ const std = @import("std");
 
 const Node = @import("Node.zig");
 
+const Edge = struct {
+    dest: *const Node,
+    weight: i32,
+};
+
 const Self = @This();
 
 alloc: std.mem.Allocator,
 _nodes: std.ArrayList(*const Node),
 /// Each source node is mapped to a list of destination nodes
-_edges: std.AutoHashMapUnmanaged(Node, std.ArrayList(*const Node)),
+_edges: std.AutoHashMapUnmanaged(Node, std.ArrayList(Edge)),
 
 pub fn init(alloc: std.mem.Allocator) Self {
     return .{ .alloc = alloc, ._nodes = .empty, ._edges = .empty };
@@ -49,8 +54,8 @@ pub fn removeNode(self: *Self, node: Node) !void {
 
     var iter = self._edges.iterator();
     while (iter.next()) |other_list| {
-        for (other_list.value_ptr.items, 0..) |n, i| {
-            if (n.id == node.id) {
+        for (other_list.value_ptr.items, 0..) |e, i| {
+            if (e.dest.id == node.id) {
                 _ = other_list.value_ptr.swapRemove(i);
                 break;
             }
@@ -58,52 +63,62 @@ pub fn removeNode(self: *Self, node: Node) !void {
     }
 }
 
-pub fn addEdge(self: *Self, src: Node, dest: *const Node) !void {
+pub fn addEdge(self: *Self, src: Node, dest: *const Node, weight: i32) !void {
     if (!self.nodeExists(src) or !self.nodeExists(dest.*)) return error.NoSuchNode;
 
-    for (self._edges.getPtr(src).?.items) |n| {
-        if (n.id == dest.id) return error.EdgeAlreadyExists;
+    for (self._edges.getPtr(src).?.items) |e| {
+        if (e.dest.id == dest.id) return error.EdgeAlreadyExists;
     }
 
-    try self._edges.getPtr(src).?.append(self.alloc, dest);
+    try self._edges.getPtr(src).?.append(self.alloc, .{ .dest = dest, .weight = weight });
 }
 
-pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node) !void {
+pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node, weight: i32) !void {
     if (!self.nodeExists(u.*) or !self.nodeExists(v.*)) return error.NoSuchNode;
 
-    for (self._edges.getPtr(u.*).?.items) |n| {
-        if (n.id == v.id) return error.EdgeAlreadyExists;
+    for (self._edges.getPtr(u.*).?.items) |e| {
+        if (e.dest.id == v.id) return error.EdgeAlreadyExists;
     }
 
-    for (self._edges.getPtr(v.*).?.items) |n| {
-        if (n.id == u.id) return error.EdgeAlreadyExists;
+    for (self._edges.getPtr(v.*).?.items) |e| {
+        if (e.dest.id == u.id) return error.EdgeAlreadyExists;
     }
 
-    try self._edges.getPtr(u.*).?.append(self.alloc, v);
-    try self._edges.getPtr(v.*).?.append(self.alloc, u);
+    try self._edges.getPtr(u.*).?.append(self.alloc, .{ .dest = v, .weight = weight });
+    try self._edges.getPtr(v.*).?.append(self.alloc, .{ .dest = u, .weight = weight });
 }
 
 pub fn edgeExists(self: *const Self, src: Node, dest: Node) !bool {
     if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
 
-    for (self._edges.getPtr(src).?.items) |n| {
-        if (n.id == dest.id) return true;
+    for (self._edges.getPtr(src).?.items) |e| {
+        if (e.dest.id == dest.id) return true;
     } else {
         return false;
+    }
+}
+
+pub fn edgeWeight(self: *const Self, src: Node, dest: Node) !?i32 {
+    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
+
+    for (self._edges.getPtr(src).?.items) |e| {
+        if (e.dest.id == dest.id) return e.weight;
+    } else {
+        return null;
     }
 }
 
 pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) !bool {
     if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NoSuchNode;
 
-    for (self._edges.getPtr(u).?.items) |n| {
-        if (n.id == v.id) break;
+    for (self._edges.getPtr(u).?.items) |e| {
+        if (e.dest.id == v.id) break;
     } else {
         return false;
     }
 
-    for (self._edges.getPtr(v).?.items) |n| {
-        if (n.id == u.id) break;
+    for (self._edges.getPtr(v).?.items) |e| {
+        if (e.dest.id == u.id) break;
     } else {
         return false;
     }
@@ -111,11 +126,40 @@ pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) !bool {
     return true;
 }
 
+pub fn doubleEdgeWeight(self: *const Self, u: Node, v: Node) !?i32 {
+    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NoSuchNode;
+
+    var u_weight: i32 = undefined;
+    var v_weight: i32 = undefined;
+
+    for (self._edges.getPtr(u).?.items) |e| {
+        if (e.dest.id == v.id) {
+            u_weight = e.weight;
+            break;
+        }
+    } else {
+        return null;
+    }
+
+    for (self._edges.getPtr(v).?.items) |e| {
+        if (e.dest.id == u.id) {
+            v_weight = e.weight;
+            break;
+        }
+    } else {
+        return null;
+    }
+
+    if (u_weight == v_weight) return u_weight;
+
+    return null;
+}
+
 pub fn removeEdge(self: *Self, src: Node, dest: Node) !void {
     if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
 
-    for (self._edges.getPtr(src).?.items, 0..) |n, i| {
-        if (n.id == dest.id) _ = self._edges.getPtr(src).?.swapRemove(i);
+    for (self._edges.getPtr(src).?.items, 0..) |e, i| {
+        if (e.dest.id == dest.id) _ = self._edges.getPtr(src).?.swapRemove(i);
         break;
     } else {
         return error.NoSuchEdge;
@@ -126,20 +170,31 @@ pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) !void {
     if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NoSuchNode;
 
     var u_idx: usize = undefined;
-    for (self._edges.getPtr(u).?.items, 0..) |n, i| {
-        if (n.id == v.id) u_idx = i;
-        break;
+    var v_idx: usize = undefined;
+    var u_weight: i32 = undefined;
+    var v_weight: i32 = undefined;
+
+    for (self._edges.getPtr(u).?.items, 0..) |e, i| {
+        if (e.dest.id == v.id) {
+            u_idx = i;
+            u_weight = e.weight;
+            break;
+        }
     } else {
         return error.NoSuchEdge;
     }
 
-    var v_idx: usize = undefined;
-    for (self._edges.getPtr(v).?.items, 0..) |n, i| {
-        if (n.id == u.id) v_idx = i;
-        break;
+    for (self._edges.getPtr(v).?.items, 0..) |e, i| {
+        if (e.dest.id == u.id) {
+            v_idx = i;
+            v_weight = e.weight;
+            break;
+        }
     } else {
         return error.NoSuchEdge;
     }
+
+    if (u_weight != v_weight) return error.NoSuchEdge;
 
     _ = self._edges.getPtr(u).?.swapRemove(u_idx);
     _ = self._edges.getPtr(v).?.swapRemove(v_idx);
@@ -272,14 +327,19 @@ pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
     return path;
 }
 
-pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) void {
-    var visited: std.AutoHashMap(Node, {}) = .init(self.alloc);
-    defer visited.deinit();
+pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, parent: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
+    if (!self.nodeExists(root.*)) return error.NoSuchNode;
 
-    self.dfs(root, null, node_fn, null, ctx, &visited);
+    var visited: std.AutoHashMap(Node, void) = .init(self.alloc);
+    defer visited.deinit();
+    try visited.ensureTotalCapacity(@intCast(self._nodes.items.len));
+
+    _ = self.dfs(root, root, null, node_fn, ctx, &visited);
 }
 
-pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
+pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, parent: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
+    if (!self.nodeExists(root.*)) return error.NoSuchNode;
+
     try self.bfs(root, null, node_fn, ctx);
 }
 
@@ -326,10 +386,10 @@ fn dfs(
         if (node.id == t.id) return true;
     }
 
-    for (self._edges.getPtr(node.*).?.items) |neighbor| {
-        if (visited.contains(neighbor.*)) continue;
+    for (self._edges.getPtr(node.*).?.items) |e| {
+        if (visited.contains(e.dest.*)) continue;
 
-        const res = self.dfs(neighbor, node, target, node_fn, ctx, visited);
+        const res = self.dfs(e.dest, node, target, node_fn, ctx, visited);
         if (res) return true;
     }
 
@@ -361,11 +421,11 @@ fn bfs(
             if (node.id == t.id) return;
         }
 
-        for (self._edges.getPtr(node.*).?.items) |neighbor| {
-            if (parent.contains(neighbor.*)) continue;
+        for (self._edges.getPtr(node.*).?.items) |e| {
+            if (parent.contains(e.dest.*)) continue;
 
-            try parent.put(neighbor.*, node);
-            try deque.pushBack(self.alloc, neighbor);
+            try parent.put(e.dest.*, node);
+            try deque.pushBack(self.alloc, e.dest);
         }
     }
 

@@ -47,15 +47,15 @@ pub fn removeNode(self: *Self, node: Node) !void {
     }
 }
 
-pub fn addEdge(self: *Self, src: Node, dest: *const Node) !void {
+pub fn addEdge(self: *Self, src: Node, dest: *const Node, weight: i32) !void {
     switch (self._graph_impl) {
-        inline else => |*impl| try impl.addEdge(src, dest),
+        inline else => |*impl| try impl.addEdge(src, dest, weight),
     }
 }
 
-pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node) !void {
+pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node, weight: i32) !void {
     switch (self._graph_impl) {
-        inline else => |*impl| try impl.addDoubleEdge(u, v),
+        inline else => |*impl| try impl.addDoubleEdge(u, v, weight),
     }
 }
 
@@ -65,9 +65,21 @@ pub fn edgeExists(self: *const Self, src: Node, dest: Node) !bool {
     };
 }
 
+pub fn edgeWeight(self: *const Self, src: Node, dest: Node) !?i32 {
+    return switch (self._graph_impl) {
+        inline else => |*impl| try impl.edgeWeight(src, dest),
+    };
+}
+
 pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) !bool {
     return switch (self._graph_impl) {
         inline else => |*impl| try impl.doubleEdgeExists(u, v),
+    };
+}
+
+pub fn doubleEdgeWeight(self: *const Self, u: Node, v: Node) !?i32 {
+    return switch (self._graph_impl) {
+        inline else => |*impl| try impl.doubleEdgeWeight(u, v),
     };
 }
 
@@ -95,15 +107,15 @@ pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
     };
 }
 
-pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) void {
+pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, parent: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
     switch (self._graph_impl) {
-        inline else => |*impl| impl.dfsRun(root, node_fn, ctx),
+        inline else => |*impl| try impl.dfsRun(root, node_fn, ctx),
     }
 }
 
-pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) void {
+pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, parent: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
     switch (self._graph_impl) {
-        inline else => |*impl| impl.bfsRun(root, node_fn, ctx),
+        inline else => |*impl| try impl.bfsRun(root, node_fn, ctx),
     }
 }
 

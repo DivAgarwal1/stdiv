@@ -7,7 +7,7 @@ const Self = @This();
 alloc: std.mem.Allocator,
 _nodes: std.ArrayList(*const Node),
 _indices: std.ArrayList(?usize),
-_edges: std.ArrayList(std.ArrayList(bool)),
+_edges: std.ArrayList(std.ArrayList(?i32)),
 
 pub fn init(alloc: std.mem.Allocator) Self {
     return .{ .alloc = alloc, ._nodes = .empty, ._indices = .empty, ._edges = .empty };
@@ -36,13 +36,13 @@ pub fn addNode(self: *Self, node: *const Node) !void {
 
     try self._nodes.append(self.alloc, node);
 
-    var new_row: std.ArrayList(bool) = try .initCapacity(self.alloc, self._nodes.items.len - 1);
-    new_row.appendNTimesAssumeCapacity(false, new_row.capacity);
+    var new_row: std.ArrayList(?i32) = try .initCapacity(self.alloc, self._nodes.items.len - 1);
+    new_row.appendNTimesAssumeCapacity(null, new_row.capacity);
 
     try self._edges.append(self.alloc, new_row);
 
     for (self._edges.items) |*list| {
-        try list.append(self.alloc, false);
+        try list.append(self.alloc, null);
     }
 }
 
@@ -72,31 +72,40 @@ pub fn removeNode(self: *Self, node: Node) !void {
     }
 }
 
-pub fn addEdge(self: *Self, src: Node, dest: *const Node) !void {
+pub fn addEdge(self: *Self, src: Node, dest: *const Node, weight: i32) !void {
     if (!self.nodeExists(src) or !self.nodeExists(dest.*)) return error.NoSuchNode;
 
     const src_idx = self._indices.items[@intCast(src.id)].?;
     const dest_idx = self._indices.items[@intCast(dest.id)].?;
 
-    if (self._edges.items[src_idx].items[dest_idx]) return error.EdgeAlreadyExists;
+    if (self._edges.items[src_idx].items[dest_idx] != null) return error.EdgeAlreadyExists;
 
-    self._edges.items[src_idx].items[dest_idx] = true;
+    self._edges.items[src_idx].items[dest_idx] = weight;
 }
 
-pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node) !void {
+pub fn addDoubleEdge(self: *Self, u: *const Node, v: *const Node, weight: i32) !void {
     if (!self.nodeExists(u.*) or !self.nodeExists(v.*)) return error.NoSuchNode;
 
     const u_idx = self._indices.items[@intCast(u.id)].?;
     const v_idx = self._indices.items[@intCast(v.id)].?;
 
-    if (self._edges.items[u_idx].items[v_idx]) return error.EdgeAlreadyExists;
-    if (self._edges.items[v_idx].items[u_idx]) return error.EdgeAlreadyExists;
+    if (self._edges.items[u_idx].items[v_idx] != null) return error.EdgeAlreadyExists;
+    if (self._edges.items[v_idx].items[u_idx] != null) return error.EdgeAlreadyExists;
 
-    self._edges.items[u_idx].items[v_idx] = true;
-    self._edges.items[v_idx].items[u_idx] = true;
+    self._edges.items[u_idx].items[v_idx] = weight;
+    self._edges.items[v_idx].items[u_idx] = weight;
 }
 
 pub fn edgeExists(self: *const Self, src: Node, dest: Node) !bool {
+    if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
+
+    const src_idx = self._indices.items[@intCast(src.id)].?;
+    const dest_idx = self._indices.items[@intCast(dest.id)].?;
+
+    return self._edges.items[src_idx].items[dest_idx] != null;
+}
+
+pub fn edgeWeight(self: *const Self, src: Node, dest: Node) !?i32 {
     if (!self.nodeExists(src) or !self.nodeExists(dest)) return error.NoSuchNode;
 
     const src_idx = self._indices.items[@intCast(src.id)].?;
@@ -111,10 +120,22 @@ pub fn doubleEdgeExists(self: *const Self, u: Node, v: Node) !bool {
     const u_idx = self._indices.items[@intCast(u.id)].?;
     const v_idx = self._indices.items[@intCast(v.id)].?;
 
-    if (!self._edges.items[u_idx].items[v_idx]) return false;
-    if (!self._edges.items[v_idx].items[u_idx]) return false;
+    if (self._edges.items[u_idx].items[v_idx] == null) return false;
+    if (self._edges.items[v_idx].items[u_idx] == null) return false;
 
     return true;
+}
+
+pub fn doubleEdgeWeight(self: *const Self, u: Node, v: Node) !?i32 {
+    if (!self.nodeExists(u) or !self.nodeExists(v)) return error.NoSuchNode;
+
+    const u_idx = self._indices.items[@intCast(u.id)].?;
+    const v_idx = self._indices.items[@intCast(v.id)].?;
+
+    if (self._edges.items[u_idx].items[v_idx] == null) return null;
+    if (self._edges.items[v_idx].items[u_idx] == null) return null;
+
+    return self._edges.items[u_idx].items[v_idx].?;
 }
 
 pub fn removeEdge(self: *Self, src: Node, dest: Node) !void {
@@ -123,8 +144,8 @@ pub fn removeEdge(self: *Self, src: Node, dest: Node) !void {
     const src_idx = self._indices.items[@intCast(src.id)].?;
     const dest_idx = self._indices.items[@intCast(dest.id)].?;
 
-    if (self._edges.items[src_idx].items[dest_idx]) {
-        self._edges.items[src_idx].items[dest_idx] = false;
+    if (self._edges.items[src_idx].items[dest_idx] != null) {
+        self._edges.items[src_idx].items[dest_idx] = null;
     } else {
         return error.NoSuchEdge;
     }
@@ -136,9 +157,11 @@ pub fn removeDoubleEdge(self: *Self, u: Node, v: Node) !void {
     const u_idx = self._indices.items[@intCast(u.id)].?;
     const v_idx = self._indices.items[@intCast(v.id)].?;
 
-    if (self._edges.items[u_idx].items[v_idx] and self._edges.items[v_idx].items[u_idx]) {
-        self._edges.items[u_idx].items[v_idx] = false;
-        self._edges.items[v_idx].items[u_idx] = false;
+    if (self._edges.items[u_idx].items[v_idx] != null and self._edges.items[v_idx].items[u_idx] != null and
+        self._edges.items[u_idx].items[v_idx].? == self._edges.items[v_idx].items[u_idx].?)
+    {
+        self._edges.items[u_idx].items[v_idx] = null;
+        self._edges.items[v_idx].items[u_idx] = null;
     } else {
         return error.NoSuchEdge;
     }
@@ -271,19 +294,20 @@ pub fn bfsPath(self: *const Self, root: *const Node, target: ?Node) ![]*const No
     return path;
 }
 
-pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
+pub fn dfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, parent: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
     if (!self.nodeExists(root.*)) return error.NoSuchNode;
 
-    var visited: std.AutoHashMap(Node, {}) = .init(self.alloc);
+    var visited: std.AutoHashMap(Node, void) = .init(self.alloc);
     defer visited.deinit();
+    try visited.ensureTotalCapacity(@intCast(self._nodes.items.len));
 
-    self.dfs(root, null, node_fn, ctx, &visited);
+    _ = self.dfs(root, root, null, node_fn, ctx, &visited);
 }
 
-pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
+pub fn bfsRun(self: *const Self, root: *const Node, node_fn: *const fn (node: *const Node, parent: *const Node, ctx: *anyopaque) void, ctx: *anyopaque) !void {
     if (!self.nodeExists(root.*)) return error.NoSuchNode;
 
-    self.bfs(root, null, node_fn, ctx);
+    try self.bfs(root, null, node_fn, ctx);
 }
 
 fn pathFn(node: *const Node, parent: *const Node, ctx: *anyopaque) void {
@@ -332,7 +356,7 @@ fn dfs(
     const root_idx = self._indices.items[@intCast(node.id)].?;
 
     for (self._edges.items[root_idx].items, 0..) |neighbor, i| {
-        if (!neighbor) continue;
+        if (neighbor == null) continue;
         if (visited.contains(self._nodes.items[i].*)) continue;
 
         const res = self.dfs(self._nodes.items[i], node, target, node_fn, ctx, visited);
@@ -370,7 +394,7 @@ fn bfs(
         const node_idx = self._indices.items[@intCast(node.id)].?;
 
         for (self._edges.items[node_idx].items, 0..) |neighbor, i| {
-            if (!neighbor) continue;
+            if (neighbor == null) continue;
             if (parent.contains(self._nodes.items[i].*)) continue;
 
             try parent.put(self._nodes.items[i].*, node);
